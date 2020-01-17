@@ -39,5 +39,56 @@
 #include <sys/types.h>
 #include <sys/utsname.h>
 #include <sys/stat.h>
+#include <sys/epoll.h>
+
+#include <queue>
+
+typedef struct
+{
+    int epollfd;
+    int ncap;
+    int event_num;
+    struct epoll_event *events;
+} stPoll_t;
+
+typedef struct
+{
+    int running;
+    stPoll_t *poll;
+} stGlobal_t;
+
+extern stGlobal_t StudyG;
+
+enum stEvent_type
+{
+    ST_EVENT_NULL   = 0,
+    ST_EVENT_DEAULT = 1u << 8,
+    ST_EVENT_READ   = 1u << 9,
+    ST_EVENT_WRITE  = 1u << 10,
+    ST_EVENT_RDWR   = ST_EVENT_READ | ST_EVENT_WRITE,
+    ST_EVENT_ERROR  = 1u << 11,
+};
+
+int init_stPoll();
+int free_stPoll();
+
+int st_event_init();
+int st_event_wait();
+int st_event_free();
+
+static inline uint64_t touint64(int fd, int id)
+{
+    uint64_t ret = 0;
+    ret |= ((uint64_t)fd) << 32;
+    ret |= ((uint64_t)id);
+
+    return ret;
+}
+
+static inline void fromuint64(uint64_t v, int *fd, int *id)
+{
+    *fd = (int)(v >> 32);
+    *id = (int)(v & 0xffffffff);
+}
 
 #endif /* STUDY_H_ */

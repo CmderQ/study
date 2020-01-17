@@ -1,22 +1,24 @@
 <?php
 
-$cid = Study\Coroutine::getCid();
-echo "coroutine [{$cid}] create" . PHP_EOL;
+study_event_init();
 
-// function task($arg)
-// {
-// 	$cid = Study\Coroutine::getCid();
-// 	echo "coroutine [{$cid}] create" . PHP_EOL;
-// 	Study\Coroutine::yield();
-// 	echo "coroutine [{$cid}] is resumed" . PHP_EOL;
-// }
+Study\Runtime::enableCoroutine();
 
-// echo "main coroutine" . PHP_EOL;
-// $cid1 = Study\Coroutine::create('task', 'a');
-// echo "main coroutine" . PHP_EOL;
-// $cid2 = Study\Coroutine::create('task', 'b');
-// echo "main coroutine" . PHP_EOL;
-// Study\Coroutine::resume($cid1);
-// echo "main coroutine" . PHP_EOL;
-// Study\Coroutine::resume($cid2);
-// echo "main coroutine" . PHP_EOL;
+Sgo(function () {
+    $ctx = stream_context_create(['socket' => ['so_reuseaddr' => true, 'backlog' => 128]]);
+    $socket = stream_socket_server(
+        'tcp://0.0.0.0:6666',
+        $errno,
+        $errstr,
+        STREAM_SERVER_BIND | STREAM_SERVER_LISTEN,
+        $ctx
+    );
+    if (!$socket) {
+        echo "$errstr ($errno)" . PHP_EOL;
+        exit(1);
+    }
+    var_dump($socket);
+    sleep(10000);
+});
+
+study_event_wait();

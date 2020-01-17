@@ -5,6 +5,10 @@ Make sure that the comment is aligned:
 # AC_CANONICAL_HOST
 
 if test "$PHP_STUDY" != "no"; then
+
+    # PHP_ADD_LIBRARY_WITH_PATH(uv, /usr/local/lib/, STUDY_SHARED_LIBADD)
+    # PHP_SUBST(STUDY_SHARED_LIBADD)
+
     PHP_ADD_LIBRARY(pthread)
     STUDY_ASM_DIR="thirdparty/boost/asm/"
     CFLAGS="-Wall -pthread $CFLAGS"
@@ -53,7 +57,18 @@ if test "$PHP_STUDY" != "no"; then
         src/coroutine/coroutine.cc \
         src/coroutine/context.cc \
         ${STUDY_ASM_DIR}make_${STUDY_CONTEXT_ASM_FILE} \
-        ${STUDY_ASM_DIR}jump_${STUDY_CONTEXT_ASM_FILE}
+        ${STUDY_ASM_DIR}jump_${STUDY_CONTEXT_ASM_FILE} \
+        src/socket.cc \
+        src/log.cc \
+        src/error.cc \
+        src/core/base.cc \
+        src/coroutine/socket.cc \
+        src/timer.cc \
+        study_coroutine_channel.cc \
+        src/coroutine/channel.cc \
+        study_coroutine_socket.cc \
+        study_coroutine_server.cc \
+        study_runtime.cc
     "
 
     PHP_NEW_EXTENSION(study, $study_source_file, $ext_shared, ,, cxx)

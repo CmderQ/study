@@ -1,9 +1,19 @@
 #include "study_coroutine.h"
+#include "coroutine.h"
+#include <iostream>
 
-using Study::PHPCoroutine;
-using Study::Coroutine;
+using study::PHPCoroutine;
+using study::Coroutine;
+using namespace std;
 
 php_coro_task PHPCoroutine::main_task = {0};
+
+void PHPCoroutine::init()
+{
+    Coroutine::set_on_yield(on_yield);
+    Coroutine::set_on_resume(on_resume);
+    Coroutine::set_on_close(on_close);
+}
 
 long PHPCoroutine::create(zend_fcall_info_cache *fci_cache, uint32_t argc, zval *argv)
 {
@@ -22,6 +32,9 @@ php_coro_task* PHPCoroutine::get_task()
     return task ? task : &main_task;
 }
 
+/**
+ * save PHP stack
+ */
 void PHPCoroutine::save_task(php_coro_task *task)
 {
     save_vm_stack(task);
@@ -74,6 +87,7 @@ void PHPCoroutine::create_func(void *arg)
 
     task->co = Coroutine::get_current();
     task->co->set_task((void *) task);
+    task->defer_tasks = nullptr;
 
     if (func->type == ZEND_USER_FUNCTION)
     {
@@ -81,6 +95,29 @@ void PHPCoroutine::create_func(void *arg)
         EG(current_execute_data) = NULL;
         zend_init_func_execute_data(call, &func->op_array, retval);
         zend_execute_ex(EG(current_execute_data));
+    }
+
+    task = get_task();
+    std::stack<php_study_fci_fcc*> *defer_tasks = task->defer_tasks;
+
+    if (defer_tasks) {
+        php_study_fci_fcc *defer_fci_fcc;
+        zval result;
+        while(!defer_tasks->empty())
+        {
+            defer_fci_fcc = defer_tasks->top();
+            defer_tasks->pop();
+            defer_fci_fcc->fci.retval = &result;
+
+            if (zend_call_function(&defer_fci_fcc->fci, &defer_fci_fcc->fcc) != SUCCESS)
+            {
+                php_error_docref(NULL, E_WARNING, "defer execute error");
+                return;
+            }
+            efree(defer_fci_fcc);
+        }
+        delete defer_tasks;
+        task->defer_tasks = nullptr;
     }
 
     zval_ptr_dtor(retval);
@@ -100,4 +137,65 @@ void PHPCoroutine::vm_stack_init(void)
     EG(vm_stack_top) = EG(vm_stack)->top;
     EG(vm_stack_end) = EG(vm_stack)->end;
     EG(vm_stack_page_size) = size;
+}
+
+void PHPCoroutine::on_yield(void *arg)
+{
+    php_coro_task *task = (php_coro_task *) arg;
+    php_coro_task *origin_task = get_origin_task(task);
+    save_task(task);
+    restore_task(origin_task);
+}
+
+void PHPCoroutine::on_resume(void *arg)
+{
+    php_coro_task *task = (php_coro_task *) arg;
+    php_coro_task *current_task = get_task();
+    save_task(current_task);
+    restore_task(task);
+}
+
+void PHPCoroutine::on_close(void *arg)
+{
+    php_coro_task *task = (php_coro_task *) arg;
+    php_coro_task *origin_task = get_origin_task(task);
+    zend_vm_stack stack = EG(vm_stack);
+    efree(stack);
+    restore_task(origin_task);
+}
+
+/**
+ * load PHP stack
+ */
+void PHPCoroutine::restore_task(php_coro_task *task)
+{
+    restore_vm_stack(task);
+}
+
+/**
+ * load PHP stack
+ */
+inline void PHPCoroutine::restore_vm_stack(php_coro_task *task)
+{
+    EG(vm_stack_top) = task->vm_stack_top;
+    EG(vm_stack_end) = task->vm_stack_end;
+    EG(vm_stack) = task->vm_stack;
+    EG(vm_stack_page_size) = task->vm_stack_page_size;
+    EG(current_execute_data) = task->execute_data;
+}
+
+void PHPCoroutine::defer(php_study_fci_fcc *defer_fci_fcc)
+{
+    php_coro_task *task = (php_coro_task *)get_task();
+    if (task->defer_tasks == nullptr)
+    {
+        task->defer_tasks = new std::stack<php_study_fci_fcc *>;
+    }
+    task->defer_tasks->push(defer_fci_fcc);
+}
+
+int PHPCoroutine::sleep(double seconds)
+{
+    Coroutine::sleep(seconds);
+    return 0;
 }

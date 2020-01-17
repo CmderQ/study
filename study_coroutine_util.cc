@@ -1,8 +1,8 @@
 #include "study_coroutine.h"
 #include <unordered_map>
 
-using Study::PHPCoroutine;
-using Study::Coroutine;
+using study::PHPCoroutine;
+using study::Coroutine;
 
 static std::unordered_map<long, Coroutine *> user_yield_coros;
 
@@ -21,9 +21,15 @@ ZEND_BEGIN_ARG_INFO_EX(arginfo_study_coroutine_create, 0, 0, 1)
     ZEND_ARG_CALLABLE_INFO(0, func, 0)
 ZEND_END_ARG_INFO()
 
-static PHP_METHOD(study_coroutine_util, create);
+ZEND_BEGIN_ARG_INFO_EX(arginfo_study_coroutine_defer, 0, 0, 1)
+    ZEND_ARG_CALLABLE_INFO(0, func, 0)
+ZEND_END_ARG_INFO()
 
-PHP_METHOD(study_coroutine_util, create)
+ZEND_BEGIN_ARG_INFO_EX(arginfo_study_coroutine_sleep, 0, 0, 1)
+    ZEND_ARG_INFO(0, seconds)
+ZEND_END_ARG_INFO()
+
+PHP_FUNCTION(study_coroutine_create)
 {
     zend_fcall_info fci = empty_fcall_info;
     zend_fcall_info_cache fcc = empty_fcall_info_cache;
@@ -90,13 +96,51 @@ PHP_METHOD(study_coroutine_util, isExist)
     RETURN_BOOL(is_exist);
 }
 
+PHP_METHOD(study_coroutine_util, defer)
+{
+    zend_fcall_info fci = empty_fcall_info;
+    zend_fcall_info_cache fcc = empty_fcall_info_cache;
+    php_study_fci_fcc *defer_fci_fcc;
+
+    defer_fci_fcc = (php_study_fci_fcc *)emalloc(sizeof(php_study_fci_fcc));
+
+    ZEND_PARSE_PARAMETERS_START(1, -1)
+        Z_PARAM_FUNC(fci, fcc)
+    ZEND_PARSE_PARAMETERS_END_EX(RETURN_FALSE);
+
+    defer_fci_fcc->fci = fci;
+    defer_fci_fcc->fcc = fcc;
+
+    PHPCoroutine::defer(defer_fci_fcc);
+}
+
+PHP_METHOD(study_coroutine_util, sleep)
+{
+    double seconds;
+    
+    ZEND_PARSE_PARAMETERS_START(1, 1)
+        Z_PARAM_DOUBLE(seconds)
+    ZEND_PARSE_PARAMETERS_END_EX(RETURN_FALSE);
+
+    if (UNEXPECTED(seconds < 0.001))
+    {
+        php_error_docref(NULL, E_WARNING, "Timer must be greater than or equal to 0.001");
+        RETURN_FALSE;
+    }
+
+    PHPCoroutine::sleep(seconds);
+    RETURN_TRUE;
+}
+
 static const zend_function_entry study_coroutine_util_methods[] =
 {
-    PHP_ME(study_coroutine_util, create, arginfo_study_coroutine_create, ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)
+    ZEND_FENTRY(create, ZEND_FN(study_coroutine_create), arginfo_study_coroutine_create, ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)
     PHP_ME(study_coroutine_util, yield, arginfo_study_coroutine_void, ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)
     PHP_ME(study_coroutine_util, resume, arginfo_study_coroutine_resume, ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)
     PHP_ME(study_coroutine_util, getCid, arginfo_study_coroutine_void, ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)
     PHP_ME(study_coroutine_util, isExist, arginfo_study_coroutine_isExist, ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)
+    PHP_ME(study_coroutine_util, defer, arginfo_study_coroutine_defer, ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)
+    PHP_ME(study_coroutine_util, sleep, arginfo_study_coroutine_sleep, ZEND_ACC_PUBLIC | ZEND_ACC_STATIC)
     PHP_FE_END
 };
 
@@ -108,6 +152,8 @@ zend_class_entry *study_coroutine_ce_ptr;
 
 void study_coroutine_util_init()
 {
+    PHPCoroutine::init();
     INIT_NS_CLASS_ENTRY(study_coroutine_ce, "Study", "Coroutine", study_coroutine_util_methods);
     study_coroutine_ce_ptr = zend_register_internal_class(&study_coroutine_ce TSRMLS_CC); // Registered in the Zend Engine
+    zend_register_class_alias("SCo", study_coroutine_ce_ptr);
 }

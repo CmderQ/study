@@ -6,7 +6,9 @@
 
 #define DEFAULT_C_STACK_SIZE          (2 *1024 * 1024)
 
-namespace Study
+typedef void (*st_coro_on_swap_t)(void*);
+
+namespace study
 {
 class Coroutine
 {
@@ -20,10 +22,25 @@ public:
     void set_task(void *_task);
     void yield();
     void resume();
+    static int sleep(double seconds);
+    static void set_on_yield(st_coro_on_swap_t func);
+    static void set_on_resume(st_coro_on_swap_t func);
+    static void set_on_close(st_coro_on_swap_t func);
 
     inline long get_cid()
     {
         return cid;
+    }
+
+    static inline Coroutine* get_by_cid(long cid)
+    {
+        auto i = coroutines.find(cid);
+        return i != coroutines.end() ? i->second : nullptr;
+    }
+
+    inline Coroutine* get_origin()
+    {
+        return origin;
     }
 
 protected:
@@ -34,6 +51,9 @@ protected:
     Context ctx;
     long cid;
     static long last_cid;
+    static st_coro_on_swap_t on_yield;
+    static st_coro_on_swap_t on_resume;
+    static st_coro_on_swap_t on_close;   /* before close */
 
     Coroutine(coroutine_func_t fn, void *private_data) :
             ctx(stack_size, fn, private_data)
@@ -50,6 +70,8 @@ protected:
         ctx.swap_in();
         if (ctx.is_end())
         {
+            assert(current == this);
+            on_close(task);
             current = origin;
             coroutines.erase(cid);
             delete this;
